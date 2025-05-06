@@ -1,10 +1,10 @@
 
 import type { Metadata } from 'next';
-import { GeistSans } from 'next/font/google'; // Corrected import for GeistSans
+import { GeistSans } from 'geist/font/sans'; // Corrected import for GeistSans
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Import Toaster
 
-const geistSans = GeistSans({ // Use GeistSans directly
+const geistSans = GeistSans({ 
   variable: '--font-geist-sans',
   subsets: ['latin'],
 });
@@ -28,3 +28,4 @@ export default function RootLayout({
     </html>
   );
 }
+
