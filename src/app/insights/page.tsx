@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -17,17 +16,7 @@ import { Loader2, BookOpen, Info, CalendarDays, MessageSquare, Tag, User, Activi
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
-
-// Helper function from book detail page
-const isValidHttpUrl = (string?: string): string is string => {
-  if (!string) return false;
-  try {
-    const url = new URL(string);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch (_) {
-    return false;
-  }
-};
+import { isValidHttpUrl } from '@/lib/utils'; // Updated import
 
 // Fetch books function (can be adapted from BookGrid or kept similar)
 const fetchUserBooks = async (userId: string): Promise<BookDocument[]> => {
@@ -123,7 +112,7 @@ export default function InsightsPage() {
   
   let displayCoverUrl: string | undefined;
   if (selectedBook) {
-    if (typeof selectedBook.coverUrl === 'string' && selectedBook.coverUrl.trim() !== '' && isValidHttpUrl(selectedBook.coverUrl)) {
+    if (selectedBook.coverUrl && isValidHttpUrl(selectedBook.coverUrl)) {
       displayCoverUrl = selectedBook.coverUrl;
     } else {
       const seed = selectedBook.title ? encodeURIComponent(selectedBook.title) : selectedBook.id || 'default-book-insight';

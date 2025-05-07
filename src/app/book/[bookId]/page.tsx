@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -19,17 +18,7 @@ import AddReadingEntryForm from '@/components/app/add-reading-entry-form';
 import EditBookDialog from '@/components/app/edit-book-dialog'; // Import EditBookDialog
 import Link from 'next/link';
 import { format } from 'date-fns';
-
-// Helper function to validate if a string is a valid HTTP/HTTPS URL
-const isValidHttpUrl = (string?: string): string is string => {
-  if (!string) return false;
-  try {
-    const url = new URL(string);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch (_) {
-    return false;
-  }
-};
+import { isValidHttpUrl } from '@/lib/utils'; // Updated import
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -131,7 +120,7 @@ export default function BookDetailPage() {
   }
   
   let displayCoverUrl: string;
-  if (typeof book.coverUrl === 'string' && book.coverUrl.trim() !== '' && isValidHttpUrl(book.coverUrl)) {
+  if (book.coverUrl && isValidHttpUrl(book.coverUrl)) {
     displayCoverUrl = book.coverUrl;
   } else {
     const seed = book.title ? encodeURIComponent(book.title) : bookId || 'default-book-detail';
@@ -215,7 +204,7 @@ export default function BookDetailPage() {
 
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="text-xl">Reading Insights & History</CardTitle>
+                <CardTitle className="text-xl">Reading Insights &amp; History</CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoadingEntries ? (

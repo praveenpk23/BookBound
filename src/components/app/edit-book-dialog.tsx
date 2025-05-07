@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -35,6 +34,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { BookDocument, BookFormData, BookStatus } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
+import { isValidHttpUrl } from '@/lib/utils'; // Updated import
 
 interface EditBookDialogProps {
   book: BookDocument;
@@ -59,12 +59,12 @@ const bookFormSchema = z.object({
 
 export default function EditBookDialog({ book, children }: EditBookDialogProps) {
   const [open, setOpen] = useState(false);
-  const [coverPreview, setCoverPreview] = useState<string | null>(book.coverUrl || null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { register, handleSubmit, control, watch, reset, formState: { errors, isSubmitting } } = useForm<BookFormData>({
+  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors, isSubmitting } } = useForm<BookFormData>({
     resolver: zodResolver(bookFormSchema),
     defaultValues: {
       title: book.title,
@@ -79,6 +79,7 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
   });
 
   const watchedCoverImage = watch("coverImage");
+  const watchedCoverUrl = watch("coverUrl");
 
   useEffect(() => {
     if (watchedCoverImage && watchedCoverImage.length > 0) {
@@ -88,10 +89,16 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
         setCoverPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
-    } else if (!open) { // Reset preview if dialog closes and no new file
-      setCoverPreview(book.coverUrl || null);
+      setValue("coverUrl", ""); // Clear URL if file is chosen
+    } else if (watchedCoverUrl && isValidHttpUrl(watchedCoverUrl)) {
+      setCoverPreview(watchedCoverUrl);
+    } else if (book.coverUrl && isValidHttpUrl(book.coverUrl)) {
+      setCoverPreview(book.coverUrl);
+    } else {
+      setCoverPreview(null);
     }
-  }, [watchedCoverImage, book.coverUrl, open]);
+  }, [watchedCoverImage, watchedCoverUrl, book.coverUrl, setValue]);
+
 
   useEffect(() => {
     // Reset form when dialog opens with new book data or when book prop changes
@@ -102,11 +109,15 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
         category: book.category,
         status: book.status,
         totalPages: book.totalPages || undefined,
-        coverUrl: book.coverUrl || '',
+        coverUrl: book.coverUrl && isValidHttpUrl(book.coverUrl) ? book.coverUrl : '',
         isbn: book.isbn || '',
         description: book.description || '',
       });
-      setCoverPreview(book.coverUrl || null);
+       if (book.coverUrl && isValidHttpUrl(book.coverUrl)) {
+        setCoverPreview(book.coverUrl);
+      } else {
+        setCoverPreview(null);
+      }
     }
   }, [book, open, reset]);
 
@@ -117,7 +128,7 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
     }
 
     try {
-      let newCoverUrl = book.coverUrl || ''; // Keep old URL by default
+      let newCoverUrlForFirestore = (book.coverUrl && isValidHttpUrl(book.coverUrl)) ? book.coverUrl : '';
 
       // Handle new image upload
       if (data.coverImage && data.coverImage.length > 0) {
@@ -128,19 +139,18 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
             const oldImageRef = ref(storage, book.coverUrl);
             await deleteObject(oldImageRef);
           } catch (deleteError: any) {
-            // Log error but don't block update if deletion fails (e.g., file not found, permissions)
             console.warn("Could not delete old cover image:", deleteError.message);
           }
         }
         
         const storageRef = ref(storage, `covers/${user.uid}/${Date.now()}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
-        newCoverUrl = await getDownloadURL(snapshot.ref);
-      } else if (data.coverUrl !== book.coverUrl) {
-        // Handle new URL input (if different from old)
-        newCoverUrl = data.coverUrl || '';
+        newCoverUrlForFirestore = await getDownloadURL(snapshot.ref);
+      } else if (data.coverUrl && isValidHttpUrl(data.coverUrl) && data.coverUrl !== book.coverUrl) {
+        // Handle new URL input (if different from old and valid)
+        newCoverUrlForFirestore = data.coverUrl;
          // If old URL was from Firebase Storage and new URL is different (or empty), delete old
-        if (book.coverUrl && book.coverUrl.includes('firebasestorage.googleapis.com') && newCoverUrl !== book.coverUrl) {
+        if (book.coverUrl && book.coverUrl.includes('firebasestorage.googleapis.com') && newCoverUrlForFirestore !== book.coverUrl) {
            try {
             const oldImageRef = ref(storage, book.coverUrl);
             await deleteObject(oldImageRef);
@@ -148,13 +158,27 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
             console.warn("Could not delete old cover image on URL change:", deleteError.message);
           }
         }
+      } else if (!data.coverImage && (!data.coverUrl || !isValidHttpUrl(data.coverUrl))) {
+        // If no new file, and new URL is empty or invalid, try to keep old valid URL, or clear it
+        if (book.coverUrl && book.coverUrl.includes('firebasestorage.googleapis.com') && (!data.coverUrl || data.coverUrl === '')) {
+           // If URL field was cleared and old was firebase, delete from storage
+           try {
+            const oldImageRef = ref(storage, book.coverUrl);
+            await deleteObject(oldImageRef);
+          } catch (deleteError: any) {
+            console.warn("Could not delete old cover image on URL clear:", deleteError.message);
+          }
+        }
+        newCoverUrlForFirestore = ''; // Clear URL if no valid new one and no file
       }
 
-      // If no new image and no new URL, and old URL was empty, set a placeholder
-      if (!newCoverUrl && data.title) {
-          newCoverUrl = `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`;
-      } else if (!newCoverUrl) {
-          newCoverUrl = `https://picsum.photos/seed/${book.id || 'default-book'}/300/450`;
+
+      // If no cover URL after all processing, set a placeholder
+      if (!newCoverUrlForFirestore && data.title) {
+          newCoverUrlForFirestore = `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`;
+      } else if (!newCoverUrlForFirestore) {
+          // Fallback if title also becomes empty (though schema should prevent)
+          newCoverUrlForFirestore = `https://picsum.photos/seed/${book.id || 'default-book-edit'}/300/450`;
       }
 
 
@@ -166,9 +190,8 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
         totalPages: data.totalPages ?? null,
         isbn: data.isbn ?? null,
         description: data.description ?? null,
-        coverUrl: newCoverUrl,
+        coverUrl: newCoverUrlForFirestore,
         updatedAt: serverTimestamp(),
-        // pagesRead is not edited here directly, it's updated by reading entries
       };
 
       const bookRef = doc(db, `users/${user.uid}/books/${book.id}`);
@@ -184,23 +207,32 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
       toast({ title: "Error", description: err.message || "Failed to update book. Please try again.", variant: "destructive" });
     }
   };
+  
+  const currentCoverPreviewSrc = coverPreview && isValidHttpUrl(coverPreview) 
+    ? coverPreview 
+    : (book.coverUrl && isValidHttpUrl(book.coverUrl) 
+        ? book.coverUrl 
+        : `https://picsum.photos/seed/${book.title || book.id || 'preview'}/80/120`);
+
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
       setOpen(isOpen);
       if (!isOpen) {
         // Reset form and preview to original book values when dialog is closed without saving
+        const originalCover = (book.coverUrl && isValidHttpUrl(book.coverUrl)) ? book.coverUrl : '';
         reset({
             title: book.title,
             author: book.author,
             category: book.category,
             status: book.status,
             totalPages: book.totalPages || undefined,
-            coverUrl: book.coverUrl || '',
+            coverUrl: originalCover,
             isbn: book.isbn || '',
             description: book.description || '',
+            coverImage: undefined,
         });
-        setCoverPreview(book.coverUrl || null);
+        setCoverPreview(originalCover || null);
       }
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -280,8 +312,12 @@ export default function EditBookDialog({ book, children }: EditBookDialogProps) 
                 </div>
                 <Input id="edit-coverImage-upload" type="file" accept="image/*" {...register("coverImage")} className="sr-only" />
               </Label>
-              {coverPreview && (
+              {(coverPreview && isValidHttpUrl(coverPreview)) ? (
                 <Image src={coverPreview} alt="Cover preview" width={80} height={120} className="h-20 w-auto rounded-md object-cover" data-ai-hint="book cover preview"/>
+              ) : (book.coverUrl && isValidHttpUrl(book.coverUrl)) ? (
+                 <Image src={book.coverUrl} alt="Current cover" width={80} height={120} className="h-20 w-auto rounded-md object-cover" data-ai-hint="book cover current"/>
+              ) : (
+                 <div className="h-20 w-[53px] bg-muted rounded-md flex items-center justify-center text-xs text-muted-foreground">No Preview</div>
               )}
             </div>
             {errors.coverImage && <p className="text-sm text-destructive">{errors.coverImage.message}</p>}

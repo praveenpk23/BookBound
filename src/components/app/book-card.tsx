@@ -1,4 +1,3 @@
-
 import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,22 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Tag, User, Activity, ExternalLink } from 'lucide-react';
 import type { BookDocument, BookStatus } from '@/types';
 import { Progress } from '@/components/ui/progress';
+import { isValidHttpUrl } from '@/lib/utils'; // Updated import
 
 
 interface BookCardProps {
   book: BookDocument;
 }
-
-const isValidHttpUrl = (string?: string) => {
-  if (!string) return false;
-  let url;
-  try {
-    url = new URL(string);
-  } catch (_) {
-    return false;
-  }
-  return url.protocol === "http:" || url.protocol === "https:";
-};
 
 export default function BookCard({ book }: BookCardProps) {
   const { id, title, author, category, status, coverUrl, pagesRead, totalPages } = book;
@@ -40,7 +29,7 @@ export default function BookCard({ book }: BookCardProps) {
   };
   
   let displayCoverUrl: string;
-  if (typeof coverUrl === 'string' && coverUrl.trim() !== '' && isValidHttpUrl(coverUrl)) {
+  if (coverUrl && isValidHttpUrl(coverUrl)) {
       displayCoverUrl = coverUrl;
   } else {
       const seed = title ? encodeURIComponent(title) : id || 'default-book-card';
