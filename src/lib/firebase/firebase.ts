@@ -4,38 +4,18 @@ import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
-// Check for essential Firebase config variables
-if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
-  throw new Error(
-    'Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is not set in your environment variables. ' +
-    'Please ensure it is defined in your .env.local file or environment configuration. ' +
-    'You can find your API key in your Firebase project settings on the Firebase console.'
-  );
-}
-if (!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) {
-  throw new Error('Firebase Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) is not set.');
-}
-if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-  throw new Error('Firebase Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID) is not set.');
-}
-if (!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) {
-  throw new Error('Firebase Storage Bucket (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) is not set.');
-}
-if (!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID) {
-  throw new Error('Firebase Messaging Sender ID (NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID) is not set.');
-}
-if (!process.env.NEXT_PUBLIC_FIREBASE_APP_ID) {
-  throw new Error('Firebase App ID (NEXT_PUBLIC_FIREBASE_APP_ID) is not set.');
-}
-
+// Firebase configuration values are now hardcoded below as per user request.
+// The original environment variable checks have been removed for these specific values.
+// It's generally recommended to use environment variables for sensitive data in production.
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyCyHSmlrRvPy1fUoEBTOJo6LszdbU2TAfo",
+  authDomain: "don-t-blink-studio.firebaseapp.com",
+  projectId: "don-t-blink-studio",
+  storageBucket: "don-t-blink-studio.appspot.com",
+  messagingSenderId: "836820249384",
+  appId: "1:836820249384:web:326ce6a7b0bc13e2c17e1d",
+  measurementId: "G-8XGNZ17H3K"
 };
 
 let app: FirebaseApp;
@@ -54,3 +34,4 @@ db = getFirestore(app);
 storage = getStorage(app);
 
 export { app, auth, db, storage };
+
