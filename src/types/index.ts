@@ -43,8 +43,7 @@ export interface BookFormData {
   author: string;
   category: string;
   status: BookStatus;
-  coverImage?: FileList;
-  coverUrl?: string; // If user provides URL directly
+  coverUrl?: string; // User provides URL directly
   totalPages?: number;
   isbn?: string;
   description?: string;
