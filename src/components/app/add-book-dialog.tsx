@@ -34,7 +34,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 import type { BookFormData, BookStatus } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
-import Image from 'next/image'; // Added Image import
+import Image from 'next/image';
+import { isValidHttpUrl } from '@/lib/utils';
 
 interface AddBookDialogProps {
   children: ReactNode;
@@ -65,7 +66,7 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { register, handleSubmit, control, watch, reset, formState: { errors, isSubmitting } } = useForm<BookFormData>({
+  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors, isSubmitting } } = useForm<BookFormData>({
     resolver: zodResolver(bookFormSchema),
     defaultValues: {
       status: "Want to Read",
@@ -75,23 +76,37 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
       coverUrl: "", 
       isbn: "",
       description: "",
+      coverImage: undefined,
     }
   });
 
   const watchedCoverImage = watch("coverImage");
+  const watchedCoverUrl = watch("coverUrl");
 
+  // Effect for when a new file is selected or cleared
   useEffect(() => {
     if (watchedCoverImage && watchedCoverImage.length > 0) {
       const file = watchedCoverImage[0];
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverPreview(reader.result as string);
-      };
+      reader.onloadend = () => { setCoverPreview(reader.result as string); };
       reader.readAsDataURL(file);
-    } else {
+      setValue("coverUrl", "", { shouldValidate: true }); // Clear URL field if file is chosen
+    } else if (!watchedCoverUrl || !isValidHttpUrl(watchedCoverUrl)) { 
+      // File is cleared, and no valid URL is typed, clear preview
       setCoverPreview(null);
     }
-  }, [watchedCoverImage]);
+  }, [watchedCoverImage, setValue, watchedCoverUrl]);
+
+  // Effect for when coverUrl input changes
+  useEffect(() => {
+    if (watchedCoverUrl && isValidHttpUrl(watchedCoverUrl)) {
+      setCoverPreview(watchedCoverUrl);
+      setValue("coverImage", undefined, { shouldValidate: true }); // Clear file input if URL is typed
+    } else if (!watchedCoverImage || watchedCoverImage.length === 0) { 
+      // URL is cleared/invalid, and no file selected, clear preview
+      setCoverPreview(null);
+    }
+  }, [watchedCoverUrl, setValue, watchedCoverImage]);
 
   const onSubmit: SubmitHandler<BookFormData> = async (data) => {
     if (!user) {
@@ -109,12 +124,9 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
         processedCoverUrlForFirestore = await getDownloadURL(snapshot.ref);
       }
       
-      // Ensure placeholder if no cover URL is provided or generated from upload
       if (!processedCoverUrlForFirestore && data.title) {
         processedCoverUrlForFirestore = `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`;
       } else if (!processedCoverUrlForFirestore) {
-        // Fallback if title is also empty, though title is required by schema.
-        // Using a generic seed for safety.
         processedCoverUrlForFirestore = `https://picsum.photos/seed/default-new-book/300/450`;
       }
 
@@ -136,8 +148,8 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
       await addDoc(collection(db, `users/${user.uid}/books`), bookDataForFirestore);
 
       toast({ title: "Book Added", description: `${data.title} has been added to your library.` });
-      queryClient.invalidateQueries({ queryKey: ['books', user.uid] });
-      queryClient.invalidateQueries({ queryKey: ['userBooks', user.uid] });
+      queryClient.invalidateQueries({ queryKey: ['books', user?.uid] });
+      queryClient.invalidateQueries({ queryKey: ['userBooks', user?.uid] });
       reset();
       setCoverPreview(null);
       setOpen(false);
@@ -236,8 +248,10 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
                 </div>
                 <Input id="coverImage-upload" type="file" accept="image/*" {...register("coverImage")} className="sr-only" />
               </Label>
-              {coverPreview && (
+              {coverPreview && isValidHttpUrl(coverPreview) ? (
                 <Image src={coverPreview} alt="Cover preview" width={80} height={120} className="h-20 w-auto rounded-md object-cover" data-ai-hint="book cover preview" />
+              ) : (
+                 <div className="h-20 w-[53px] bg-muted rounded-md flex items-center justify-center text-xs text-muted-foreground">No Preview</div>
               )}
             </div>
             {errors.coverImage && <p className="text-sm text-destructive">{errors.coverImage.message}</p>}
