@@ -12,6 +12,17 @@ interface BookCardProps {
   book: BookDocument;
 }
 
+const isValidHttpUrl = (string?: string) => {
+  if (!string) return false;
+  let url;
+  try {
+    url = new URL(string);
+  } catch (_) {
+    return false;
+  }
+  return url.protocol === "http:" || url.protocol === "https:";
+};
+
 export default function BookCard({ book }: BookCardProps) {
   const { id, title, author, category, status, coverUrl, pagesRead, totalPages } = book;
 
@@ -28,7 +39,11 @@ export default function BookCard({ book }: BookCardProps) {
     }
   };
   
-  const displayCoverUrl = coverUrl || `https://picsum.photos/seed/${encodeURIComponent(title)}/300/450`;
+  const usePlaceholder = !isValidHttpUrl(coverUrl);
+  const displayCoverUrl = usePlaceholder
+    ? `https://picsum.photos/seed/${encodeURIComponent(title || 'default-book-seed')}/300/450`
+    : coverUrl!; // coverUrl is now confirmed to be a valid URL string
+
   const progress = totalPages && pagesRead ? Math.round((pagesRead / totalPages) * 100) : 0;
 
   return (
