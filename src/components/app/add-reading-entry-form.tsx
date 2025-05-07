@@ -13,12 +13,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2, Save } from "lucide-react";
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, writeBatch, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { ReadingEntryFormData } from '@/types';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 interface AddReadingEntryFormProps {
   bookId: string;
@@ -26,25 +27,42 @@ interface AddReadingEntryFormProps {
   totalPages?: number | null;
 }
 
-const readingEntrySchema = z.object({
-  pagesReadThisSession: z.coerce.number().int().min(0, "Pages read cannot be negative"),
+const createReadingEntrySchema = (totalPages?: number | null) => z.object({
+  startPage: z.coerce.number().int().min(1, "Start page must be at least 1")
+    .max(totalPages || Number.MAX_SAFE_INTEGER, `Start page cannot exceed total pages (${totalPages})`),
+  endPage: z.coerce.number().int().min(1, "End page must be at least 1")
+    .max(totalPages || Number.MAX_SAFE_INTEGER, `End page cannot exceed total pages (${totalPages})`),
   takeaway: z.string().optional(),
   date: z.date().optional(),
+}).refine(data => data.endPage >= data.startPage, {
+  message: "End page must be greater than or equal to start page.",
+  path: ["endPage"],
 });
+
 
 export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPages }: AddReadingEntryFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { register, handleSubmit, control, reset, formState: { errors, isSubmitting } } = useForm<ReadingEntryFormData>({
+  const readingEntrySchema = createReadingEntrySchema(totalPages);
+
+  const { register, handleSubmit, control, reset, formState: { errors, isSubmitting }, setValue } = useForm<ReadingEntryFormData>({
     resolver: zodResolver(readingEntrySchema),
     defaultValues: {
-      pagesReadThisSession: 0,
+      startPage: (currentPagesRead || 0) < (totalPages || Infinity) ? (currentPagesRead || 0) + 1 : (totalPages || 1),
+      endPage: (currentPagesRead || 0) < (totalPages || Infinity) ? (currentPagesRead || 0) + 1 : (totalPages || 1),
       takeaway: '',
       date: new Date(),
     }
   });
+
+  useEffect(() => {
+    const newStartPage = (currentPagesRead || 0) < (totalPages || Infinity) ? (currentPagesRead || 0) + 1 : (totalPages || 1);
+    setValue("startPage", newStartPage);
+    setValue("endPage", newStartPage);
+  }, [currentPagesRead, totalPages, setValue]);
+
 
   const onSubmit: SubmitHandler<ReadingEntryFormData> = async (data) => {
     if (!user) {
@@ -52,13 +70,27 @@ export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPag
       return;
     }
 
-    const newTotalPagesRead = currentPagesRead + data.pagesReadThisSession;
-
-    if (totalPages && newTotalPagesRead > totalPages) {
-        toast({ title: "Error", description: `Total pages read (${newTotalPagesRead}) cannot exceed total pages of the book (${totalPages}).`, variant: "destructive" });
-        return;
+    const pagesReadThisSession = data.endPage - data.startPage + 1;
+    if (pagesReadThisSession <= 0) {
+      toast({ title: "Error", description: "End page must be greater than or equal to start page resulting in at least 1 page read.", variant: "destructive" });
+      return;
     }
     
+    const newTotalPagesReadForBook = currentPagesRead + pagesReadThisSession;
+
+    if (totalPages && newTotalPagesReadForBook > totalPages && currentPagesRead < totalPages) {
+       const maxPossiblePagesThisSession = totalPages - currentPagesRead;
+        toast({ 
+            title: "Error", 
+            description: `You can log at most ${maxPossiblePagesThisSession} more page(s) for this book. This session's entry would exceed the total pages.`, 
+            variant: "destructive" 
+        });
+        return;
+    }
+     // If already finished, allow logging more pages but don't increase beyond totalPages for status.
+    const finalPagesReadForBook = totalPages ? Math.min(newTotalPagesReadForBook, totalPages) : newTotalPagesReadForBook;
+
+
     const batch = writeBatch(db);
 
     // Add reading entry
@@ -66,22 +98,24 @@ export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPag
     batch.set(entryRef, {
       bookId,
       userId: user.uid,
-      pagesReadThisSession: data.pagesReadThisSession,
-      newTotalPagesRead: newTotalPagesRead,
+      startPage: data.startPage,
+      endPage: data.endPage,
+      pagesReadThisSession: pagesReadThisSession,
+      newTotalPagesRead: finalPagesReadForBook, // This represents the book's state *after* this entry
       takeaway: data.takeaway || "",
-      date: data.date || serverTimestamp(), // Use selected date or server timestamp
+      date: data.date ? Timestamp.fromDate(data.date) : serverTimestamp(),
     });
 
     // Update book's pagesRead and status if necessary
     const bookRef = doc(db, `users/${user.uid}/books/${bookId}`);
     const bookUpdateData: { pagesRead: number; status?: 'Finished' | 'Reading'; updatedAt: any } = {
-      pagesRead: newTotalPagesRead,
+      pagesRead: finalPagesReadForBook,
       updatedAt: serverTimestamp(),
     };
-
-    if (totalPages && newTotalPagesRead >= totalPages) {
+    
+    if (totalPages && finalPagesReadForBook >= totalPages) {
       bookUpdateData.status = 'Finished';
-    } else if (newTotalPagesRead > 0 && totalPages) { // If pagesRead > 0 and not finished, it's 'Reading'
+    } else if (finalPagesReadForBook > 0 ) { 
         bookUpdateData.status = 'Reading';
     }
 
@@ -91,10 +125,18 @@ export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPag
     try {
       await batch.commit();
       toast({ title: "Entry Added", description: "Your reading progress has been saved." });
-      queryClient.invalidateQueries({ queryKey: ['books', user.uid] }); // To refresh book grid if status/progress changes
-      queryClient.invalidateQueries({ queryKey: ['book', bookId, user.uid] }); // To refresh book detail page
-      queryClient.invalidateQueries({ queryKey: ['readingEntries', bookId, user.uid] }); // To refresh entries list
-      reset({ pagesReadThisSession: 0, takeaway: '', date: new Date() });
+      queryClient.invalidateQueries({ queryKey: ['books', user.uid] }); 
+      queryClient.invalidateQueries({ queryKey: ['book', bookId, user.uid] }); 
+      queryClient.invalidateQueries({ queryKey: ['readingEntries', bookId, user.uid] }); 
+      
+      const nextStartPage = (finalPagesReadForBook || 0) < (totalPages || Infinity) ? (finalPagesReadForBook || 0) + 1 : (totalPages || 1);
+      reset({ 
+        startPage: nextStartPage, 
+        endPage: nextStartPage, 
+        takeaway: '', 
+        date: new Date() 
+      });
+
     } catch (err) {
       console.error("Failed to add reading entry:", err);
       toast({ title: "Error", description: "Failed to save progress. Please try again.", variant: "destructive" });
@@ -105,11 +147,17 @@ export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPag
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1">
-          <Label htmlFor="pagesReadThisSession">Pages Read This Session</Label>
-          <Input id="pagesReadThisSession" type="number" {...register("pagesReadThisSession")} />
-          {errors.pagesReadThisSession && <p className="text-sm text-destructive">{errors.pagesReadThisSession.message}</p>}
+          <Label htmlFor="startPage">Start Page</Label>
+          <Input id="startPage" type="number" {...register("startPage")} />
+          {errors.startPage && <p className="text-sm text-destructive">{errors.startPage.message}</p>}
         </div>
         <div className="space-y-1">
+          <Label htmlFor="endPage">End Page</Label>
+          <Input id="endPage" type="number" {...register("endPage")} />
+          {errors.endPage && <p className="text-sm text-destructive">{errors.endPage.message}</p>}
+        </div>
+      </div>
+       <div className="space-y-1">
           <Label htmlFor="date">Date</Label>
           <Controller
             name="date"
@@ -142,13 +190,13 @@ export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPag
           />
           {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
         </div>
-      </div>
 
       <div className="space-y-1">
         <Label htmlFor="takeaway">Takeaway / Notes (Optional)</Label>
         <Textarea id="takeaway" {...register("takeaway")} placeholder="What stood out to you in this session?" rows={4} />
         {errors.takeaway && <p className="text-sm text-destructive">{errors.takeaway.message}</p>}
       </div>
+      {errors.root && <p className="text-sm text-destructive">{errors.root.message}</p>}
 
       <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
         {isSubmitting ? (
@@ -166,3 +214,4 @@ export default function AddReadingEntryForm({ bookId, currentPagesRead, totalPag
     </form>
   );
 }
+

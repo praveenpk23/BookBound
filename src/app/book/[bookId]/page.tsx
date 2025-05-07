@@ -206,19 +206,24 @@ export default function BookDetailPage() {
                     {readingEntries.map(entry => (
                       <li key={entry.id} className="border p-4 rounded-md shadow-sm bg-muted/20">
                         <div className="flex justify-between items-start mb-2">
-                          <p className="font-semibold text-primary">
-                             {entry.pagesReadThisSession} page{entry.pagesReadThisSession !== 1 ? 's' : ''} read
-                          </p>
-                          <span className="text-xs text-muted-foreground">
+                           <div>
+                            <p className="font-semibold text-primary">
+                              Pages {entry.startPage} → {entry.endPage}
+                            </p>
+                             <p className="text-sm text-muted-foreground">
+                                ({entry.pagesReadThisSession} page{entry.pagesReadThisSession !== 1 ? 's' : ''} read)
+                             </p>
+                           </div>
+                          <span className="text-xs text-muted-foreground flex items-center whitespace-nowrap">
                             <CalendarDays className="inline-block h-3 w-3 mr-1" />
                             {entry.date instanceof Timestamp ? format(entry.date.toDate(), 'MMM d, yyyy') : 'Invalid Date'}
                           </span>
                         </div>
                          <p className="text-sm text-muted-foreground mb-1">
-                           Total pages read: {entry.newTotalPagesRead}
+                           Total pages read after session: {entry.newTotalPagesRead}
                          </p>
                         {entry.takeaway && (
-                          <div className="mt-2 text-sm">
+                          <div className="mt-3 text-sm">
                             <h4 className="font-medium mb-1 text-foreground flex items-center">
                               <MessageSquare className="inline-block h-4 w-4 mr-1.5 text-primary" />
                               Takeaway:
@@ -247,3 +252,4 @@ export default function BookDetailPage() {
     </div>
   );
 }
+

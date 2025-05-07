@@ -19,13 +19,15 @@ export interface BookDocument extends BookBase {
   userId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  pagesRead?: number; // Moved from BookCard to be stored with book
+  pagesRead?: number; 
 }
 
 export interface ReadingEntryBase {
   bookId: string;
-  pagesReadThisSession: number; // Pages read in this specific session
-  newTotalPagesRead: number; // Updated total pages read for the book
+  startPage: number;
+  endPage: number;
+  pagesReadThisSession: number; 
+  newTotalPagesRead: number; 
   takeaway: string;
   date: Timestamp;
 }
@@ -50,7 +52,9 @@ export interface BookFormData {
 
 // For AddReadingEntryForm state
 export interface ReadingEntryFormData {
-  pagesReadThisSession: number;
+  startPage: number;
+  endPage: number;
   takeaway: string;
   date?: Date; // Optional date override, defaults to now
 }
+
