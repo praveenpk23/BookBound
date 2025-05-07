@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { BookOpen, UserPlus, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, type FirebaseError } from 'firebase/auth';
 import { auth } from '@/lib/firebase/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
@@ -36,16 +36,18 @@ export default function SignupPage() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      const msg = "Passwords do not match.";
+      setError(msg);
       setIsLoading(false);
-      toast({ title: "Signup Failed", description: "Passwords do not match.", variant: "destructive" });
+      toast({ title: "Signup Failed", description: msg, variant: "destructive" });
       return;
     }
 
     if (password.length < 6) {
-      setError("Password should be at least 6 characters.");
+      const msg = "Password should be at least 6 characters.";
+      setError(msg);
       setIsLoading(false);
-      toast({ title: "Signup Failed", description: "Password should be at least 6 characters.", variant: "destructive" });
+      toast({ title: "Signup Failed", description: msg, variant: "destructive" });
       return;
     }
 
@@ -55,8 +57,14 @@ export default function SignupPage() {
       router.push('/');
     } catch (err: any) {
       console.error('Signup failed:', err);
-      setError(err.message || 'Signup failed. Please try again.');
-      toast({ title: "Signup Failed", description: err.message || "An error occurred. Please try again.", variant: "destructive" });
+      let errorMessage = "Signup failed. Please try again.";
+      if (err.code === 'auth/email-already-in-use') {
+        errorMessage = "This email address is already in use. Please try logging in or use a different email.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
+      toast({ title: "Signup Failed", description: errorMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -92,6 +100,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
+                aria-describedby={errors.email ? "email-error" : undefined}
               />
             </div>
             <div className="space-y-2">
@@ -104,6 +113,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
+                aria-describedby={errors.password ? "password-error" : undefined}
               />
             </div>
             <div className="space-y-2">
@@ -116,10 +126,11 @@ export default function SignupPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={isLoading}
+                aria-describedby={errors.confirmPassword ? "confirm-password-error" : undefined}
               />
             </div>
             {error && (
-              <p className="text-sm text-destructive bg-destructive/10 p-2 rounded-md">{error}</p>
+              <p id="form-error" className="text-sm text-destructive bg-destructive/10 p-2 rounded-md" role="alert">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
