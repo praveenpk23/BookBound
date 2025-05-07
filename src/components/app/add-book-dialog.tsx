@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -32,7 +31,7 @@ import { db, storage } from '@/lib/firebase/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
-import type { BookFormData, BookStatus } from '@/types';
+import type { BookFormData, BookStatus, BookDocument } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface AddBookDialogProps {
@@ -69,6 +68,12 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
     resolver: zodResolver(bookFormSchema),
     defaultValues: {
       status: "Want to Read",
+      title: "",
+      author: "",
+      category: "",
+      coverUrl: "",
+      isbn: "",
+      description: "",
     }
   });
 
@@ -94,28 +99,38 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
     }
 
     try {
-      let coverImageUrl = data.coverUrl || ''; // Use provided URL if available
+      let processedCoverUrl = data.coverUrl || ''; // Use provided URL if available
 
       if (data.coverImage && data.coverImage.length > 0) {
         const file = data.coverImage[0];
         const storageRef = ref(storage, `covers/${user.uid}/${Date.now()}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
-        coverImageUrl = await getDownloadURL(snapshot.ref);
+        processedCoverUrl = await getDownloadURL(snapshot.ref);
       }
 
-      // Destructure data to exclude FileList and form's coverUrl, as we use a processed coverImageUrl
-      // and FileList (coverImage) should not be stored in Firestore.
-      const { coverImage: discardedFile, coverUrl: discardedFormUrl, ...bookDetailsToSave } = data;
+      const finalCoverUrl = processedCoverUrl || `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`;
 
-      await addDoc(collection(db, `users/${user.uid}/books`), {
-        ...bookDetailsToSave, // This contains title, author, category, status, totalPages, isbn, description
-        coverUrl: coverImageUrl || `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`, // Fallback placeholder
-        // The 'coverImage' (FileList) field is now excluded from bookDetailsToSave and not explicitly set to undefined
+      // Explicitly construct the object for Firestore
+      const bookDataForFirestore = {
+        title: data.title,
+        author: data.author,
+        category: data.category,
+        status: data.status,
+        totalPages: data.totalPages || null, // Store null if undefined/0, or Zod schema handles null
+        isbn: data.isbn || null, // Store null if empty/undefined
+        description: data.description || null, // Store null if empty/undefined
+        coverUrl: finalCoverUrl, // Use the processed URL with fallback
         userId: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        pagesRead: 0, // Initialize pagesRead
-      });
+        pagesRead: 0,
+      };
+      
+      // Ensure no 'undefined' values are explicitly sent for optional fields that might be null
+      // (though Firestore usually handles 'undefined' by omitting the field, being explicit with 'null' is safer).
+      // The construction above with `|| null` already handles this for totalPages, isbn, description.
+
+      await addDoc(collection(db, `users/${user.uid}/books`), bookDataForFirestore);
 
       toast({ title: "Book Added", description: `${data.title} has been added to your library.` });
       queryClient.invalidateQueries({ queryKey: ['books', user.uid] });
@@ -249,4 +264,3 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
     </Dialog>
   );
 }
-
