@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, BookOpen, Info, CalendarDays, MessageSquare, Tag, User, Activity } from 'lucide-react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
+import { Badge } from '@/components/ui/badge'; // Added import for Badge
 
 // Helper function from book detail page
 const isValidHttpUrl = (string?: string): string is string => {
