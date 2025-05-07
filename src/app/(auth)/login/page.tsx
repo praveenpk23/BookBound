@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { BookOpen, LogIn, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '@/lib/firebase/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
+import { GoogleIcon } from '@/components/icons/google-icon';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -29,7 +30,7 @@ export default function LoginPage() {
     }
   }, [user, authLoading, router]);
 
-  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleEmailLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
@@ -46,6 +47,31 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      toast({ title: "Login Successful", description: "Welcome!" });
+      router.push('/');
+    } catch (err: any) {
+      console.error('Google Sign-in failed:', err);
+      let errorMessage = "Google Sign-in failed. Please try again.";
+      if (err.code === 'auth/popup-closed-by-user') {
+          errorMessage = "Sign-in cancelled. The sign-in popup was closed before completion.";
+      } else if (err.code === 'auth/cancelled-popup-request') {
+          errorMessage = "Sign-in cancelled. Multiple popups were opened.";
+      } else if (err.code === 'auth/account-exists-with-different-credential') {
+          errorMessage = "An account already exists with this email address using a different sign-in method.";
+      }
+      setError(errorMessage);
+      toast({ title: "Google Sign-in Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   if (authLoading || (!authLoading && user) ) {
     return (
@@ -54,7 +80,6 @@ export default function LoginPage() {
       </div>
     );
   }
-
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -67,7 +92,7 @@ export default function LoginPage() {
           <CardDescription>Sign in to track your reading journey.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleEmailLogin} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
@@ -109,15 +134,36 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          <Button variant="outline" type="button" className="w-full" onClick={handleGoogleSignIn} disabled={isLoading}>
+            {isLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <GoogleIcon className="mr-2 h-4 w-4" />
+            )}
+            Sign in with Google
+          </Button>
+
         </CardContent>
-        <CardFooter className="flex flex-col items-center text-sm">
+        <CardFooter className="flex flex-col items-center text-sm pt-6">
           <p className="text-muted-foreground">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="font-medium text-primary hover:underline">
               Sign Up
             </Link>
           </p>
-           <Link href="#" className="mt-2 text-xs text-muted-foreground hover:underline" onClick={(e) => {e.preventDefault(); alert("Forgot password functionality not implemented yet.");}}>
+           <Link href="#" className="mt-2 text-xs text-muted-foreground hover:underline" onClick={(e) => {e.preventDefault(); toast({title: "Feature not available", description:"Password reset functionality is not implemented yet."});}}>
               Forgot password?
             </Link>
         </CardFooter>
