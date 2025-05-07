@@ -28,6 +28,12 @@ const nextConfig: NextConfig = {
         hostname: 'lh3.googleusercontent.com', // For Google User profile images
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'm.media-amazon.com', // For Amazon product images
+        port: '',
+        pathname: '/**',
       }
     ],
   },
