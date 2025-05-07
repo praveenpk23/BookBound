@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -18,6 +17,17 @@ import { BookOpen, CalendarDays, Edit, FileText, Info, Loader2, MessageSquare, T
 import AddReadingEntryForm from '@/components/app/add-reading-entry-form';
 import Link from 'next/link';
 import { format } from 'date-fns';
+
+// Helper function to validate if a string is a valid HTTP/HTTPS URL
+const isValidHttpUrl = (string?: string): string is string => {
+  if (!string) return false;
+  try {
+    const url = new URL(string);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+};
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -118,7 +128,15 @@ export default function BookDetailPage() {
     );
   }
   
-  const displayCoverUrl = book.coverUrl || `https://picsum.photos/seed/${encodeURIComponent(book.title)}/400/600`;
+  let displayCoverUrl: string;
+  if (isValidHttpUrl(book.coverUrl)) {
+    displayCoverUrl = book.coverUrl;
+  } else {
+    // Fallback logic if book.coverUrl is invalid or missing
+    const seed = book.title ? encodeURIComponent(book.title) : bookId || 'default-book-detail';
+    displayCoverUrl = `https://picsum.photos/seed/${seed}/400/600`;
+  }
+  
   const progress = book.totalPages && book.pagesRead ? Math.round((book.pagesRead / book.totalPages) * 100) : 0;
 
 
@@ -251,5 +269,3 @@ export default function BookDetailPage() {
       </footer>
     </div>
   );
-}
-
