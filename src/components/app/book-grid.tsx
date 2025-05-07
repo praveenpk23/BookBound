@@ -2,41 +2,66 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import BookCard, { type Book } from './book-card';
+import BookCard from './book-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { List, Grid } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { List, Grid, Loader2, Info } from 'lucide-react';
+import { useAuth } from '@/contexts/auth-context';
+import { db } from '@/lib/firebase/firebase';
+import { collection, query, where, orderBy, onSnapshot, type DocumentData, type QuerySnapshot } from 'firebase/firestore';
+import type { BookDocument } from '@/types';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Mock data for books
-const mockBooks: Book[] = [
-  { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', category: 'Fiction', status: 'Finished', coverUrl: 'https://picsum.photos/seed/great-gatsby/300/450' },
-  { id: '2', title: 'Sapiens: A Brief History of Humankind', author: 'Yuval Noah Harari', category: 'Non-Fiction', status: 'Reading', coverUrl: 'https://picsum.photos/seed/sapiens/300/450' },
-  { id: '3', title: 'Dune', author: 'Frank Herbert', category: 'Science Fiction', status: 'Want to Read', coverUrl: 'https://picsum.photos/seed/dune/300/450' },
-  { id: '4', title: 'To Kill a Mockingbird', author: 'Harper Lee', category: 'Fiction', status: 'Finished' },
-  { id: '5', title: '1984', author: 'George Orwell', category: 'Dystopian', status: 'Reading' },
-  { id: '6', title: 'The Hobbit', author: 'J.R.R. Tolkien', category: 'Fantasy', status: 'Want to Read', coverUrl: 'https://picsum.photos/seed/the-hobbit/300/450' },
-  { id: '7', title: 'Cosmos', author: 'Carl Sagan', category: 'Science', status: 'Finished' },
-  { id: '8', title: 'Educated: A Memoir', author: 'Tara Westover', category: 'Biography', status: 'Reading' },
-];
+const categories = ["All", "Fiction", "Non-Fiction", "Science", "Fantasy", "Biography", "History", "Sci-Fi", "Mystery", "Thriller", "Romance", "Self-Help", "Other"];
+const statuses: BookDocument['status'][] = ["Want to Read", "Reading", "Finished"];
+const allStatuses = ["All", ...statuses];
 
-const categories = ["All", "Fiction", "Non-Fiction", "Science Fiction", "Dystopian", "Fantasy", "Science", "Biography", "History"];
-const statuses = ["All", "Want to Read", "Reading", "Finished"];
+
+const fetchBooks = async (userId: string): Promise<BookDocument[]> => {
+  if (!userId) return [];
+  
+  const booksCol = collection(db, `users/${userId}/books`);
+  // No real-time updates needed for the grid for now, snapshot is fine
+  // For real-time, use onSnapshot and manage unsubscription
+  return new Promise((resolve, reject) => {
+    const q = query(booksCol, orderBy("updatedAt", "desc"));
+    const unsubscribe = onSnapshot(q, 
+      (snapshot: QuerySnapshot<DocumentData>) => {
+        const booksData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        } as BookDocument));
+        resolve(booksData);
+      }, 
+      (error) => {
+        console.error("Error fetching books: ", error);
+        reject(error);
+      }
+    );
+    // TanStack Query will manage caching, so we might not need to unsubscribe immediately here
+    // For long-lived components, or if not using TanStack Query for this, manage unsubscribe:
+    // return () => unsubscribe(); 
+  });
+};
+
 
 export default function BookGrid() {
-  const [books, setBooks] = useState<Book[]>([]);
-  const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const { data: books = [], isLoading, error } = useQuery<BookDocument[], Error>({
+    queryKey: ['books', user?.uid],
+    queryFn: () => fetchBooks(user!.uid),
+    enabled: !!user, // Only run query if user is available
+  });
+  
+  const [filteredBooks, setFilteredBooks] = useState<BookDocument[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Default to grid view
-
-  useEffect(() => {
-    // Simulate fetching books
-    setBooks(mockBooks);
-    setFilteredBooks(mockBooks);
-  }, []);
+  const [selectedStatus, setSelectedStatus] = useState<"All" | BookDocument['status']>('All');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     let tempBooks = books;
@@ -59,7 +84,43 @@ export default function BookGrid() {
     setFilteredBooks(tempBooks);
   }, [searchTerm, selectedCategory, selectedStatus, books]);
 
+  useEffect(() => {
+    // Pre-populate filteredBooks when books data changes
+    if (books) {
+      setFilteredBooks(books);
+    }
+  }, [books]);
 
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+     return (
+      <Alert variant="destructive" className="mt-4">
+        <Info className="h-4 w-4" />
+        <AlertTitle>Error Loading Books</AlertTitle>
+        <AlertDescription>
+          There was a problem fetching your books. Please try again later.
+          {/* Details: {error.message} */}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  
+  if (!user) { // Should be handled by page.tsx, but as a safeguard
+    return (
+      <div className="text-center py-10">
+        <p className="text-xl text-muted-foreground">Please log in to see your books.</p>
+      </div>
+    );
+  }
+  
   if (books.length === 0) {
     return (
       <div className="text-center py-10">
@@ -68,6 +129,7 @@ export default function BookGrid() {
       </div>
     );
   }
+
 
   return (
     <div>
@@ -87,12 +149,12 @@ export default function BookGrid() {
               {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+          <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as "All" | BookDocument['status'])}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              {statuses.map(stat => <SelectItem key={stat} value={stat}>{stat}</SelectItem>)}
+              {allStatuses.map(stat => <SelectItem key={stat} value={stat}>{stat}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -112,25 +174,26 @@ export default function BookGrid() {
             ))}
           </div>
         ) : (
-          // Basic List View (can be expanded later)
           <div className="space-y-4">
             {filteredBooks.map((book) => (
-              <Card key={book.id} className="flex items-center p-4 shadow hover:shadow-md transition-shadow">
-                <div className="w-16 h-24 relative mr-4 flex-shrink-0">
-                   <img 
-                    src={book.coverUrl || `https://picsum.photos/seed/${book.title.replace(/\s+/g, '-')}/100/150`} 
-                    alt={book.title} 
-                    className="w-full h-full object-cover rounded"
-                    data-ai-hint="book cover"
-                    />
-                </div>
-                <div className="flex-grow">
-                  <h3 className="text-lg font-semibold">{book.title}</h3>
-                  <p className="text-sm text-muted-foreground">{book.author}</p>
-                  <p className="text-xs text-muted-foreground">{book.category}</p>
-                </div>
-                <Badge variant={book.status === 'Finished' ? 'default' : book.status === 'Reading' ? 'secondary' : 'outline'}>{book.status}</Badge>
-              </Card>
+              <Link href={`/book/${book.id}`} key={book.id} className="block">
+                <Card className="flex items-center p-4 shadow hover:shadow-md transition-shadow cursor-pointer">
+                  <div className="w-16 h-24 relative mr-4 flex-shrink-0">
+                     <img 
+                      src={book.coverUrl || `https://picsum.photos/seed/${encodeURIComponent(book.title)}/100/150`} 
+                      alt={book.title} 
+                      className="w-full h-full object-cover rounded"
+                      data-ai-hint="book cover thumbnail"
+                      />
+                  </div>
+                  <div className="flex-grow">
+                    <h3 className="text-lg font-semibold">{book.title}</h3>
+                    <p className="text-sm text-muted-foreground">{book.author}</p>
+                    <p className="text-xs text-muted-foreground">{book.category}</p>
+                  </div>
+                  <Badge variant={book.status === 'Finished' ? 'default' : book.status === 'Reading' ? 'secondary' : 'outline'}>{book.status}</Badge>
+                </Card>
+              </Link>
             ))}
           </div>
         )

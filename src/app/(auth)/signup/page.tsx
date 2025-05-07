@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BookOpen, UserPlus, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-// import { useRouter } from 'next/navigation'; // Uncomment when routing is implemented
+import { useRouter } from 'next/navigation';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -16,13 +20,15 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // const router = useRouter(); // Uncomment when routing is implemented
+  const router = useRouter();
+  const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
 
-  // For client-side only rendering (if needed for specific browser APIs, not strictly for this form)
-  const [isClient, setIsClient] = useState(false);
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    if (!authLoading && user) {
+      router.push('/');
+    }
+  }, [user, authLoading, router]);
 
   const handleSignup = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,29 +38,37 @@ export default function SignupPage() {
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       setIsLoading(false);
+      toast({ title: "Signup Failed", description: "Passwords do not match.", variant: "destructive" });
       return;
     }
 
-    // Mock Firebase Auth signup
-    try {
-      console.log('Attempting signup with:', { email, password });
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
-      
-      console.log('Signup successful');
-      // router.push('/'); // Redirect to dashboard on successful signup - Uncomment when routing is implemented
-      alert("Signup Successful! Redirecting to dashboard (mock)...");
-      // For now, just clear form
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+    if (password.length < 6) {
+      setError("Password should be at least 6 characters.");
+      setIsLoading(false);
+      toast({ title: "Signup Failed", description: "Password should be at least 6 characters.", variant: "destructive" });
+      return;
+    }
 
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      toast({ title: "Signup Successful", description: "Your account has been created." });
+      router.push('/');
     } catch (err: any) {
       console.error('Signup failed:', err);
       setError(err.message || 'Signup failed. Please try again.');
+      toast({ title: "Signup Failed", description: err.message || "An error occurred. Please try again.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (authLoading || (!authLoading && user)) {
+     return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -85,7 +99,7 @@ export default function SignupPage() {
               <Input 
                 id="password" 
                 type="password" 
-                placeholder="••••••••" 
+                placeholder="•••••••• (min. 6 characters)" 
                 required 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
