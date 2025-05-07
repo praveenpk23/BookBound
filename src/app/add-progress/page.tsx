@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -6,7 +5,7 @@ import { useRouter, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase/firebase';
-import { collection, query, orderBy, onSnapshot, type DocumentData, type QuerySnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, type DocumentData, type QuerySnapshot, getDocs } from 'firebase/firestore';
 import type { BookDocument } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,24 +19,18 @@ import { useQuery } from '@tanstack/react-query';
 const fetchUserBooks = async (userId: string): Promise<BookDocument[]> => {
   if (!userId) return [];
   const booksCol = collection(db, `users/${userId}/books`);
-  return new Promise((resolve, reject) => {
-    const q = query(booksCol, orderBy("title", "asc")); 
-    const unsubscribe = onSnapshot(q,
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        const booksData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        } as BookDocument));
-        resolve(booksData);
-      },
-      (error) => {
-        console.error("Error fetching user books: ", error);
-        reject(error);
-      }
-    );
-    // TanStack Query handles refetching/cleanup, so direct unsubscribe here might not be ideal for queryFn.
-    // This setup is common for direct Firestore subscriptions.
-  });
+  const q = query(booksCol, orderBy("title", "asc")); 
+  try {
+    const snapshot = await getDocs(q);
+    const booksData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    } as BookDocument));
+    return booksData;
+  } catch (error) {
+    console.error("Error fetching user books: ", error);
+    throw error;
+  }
 };
 
 export default function AddProgressPage() {
@@ -164,4 +157,3 @@ export default function AddProgressPage() {
     </div>
   );
 }
-

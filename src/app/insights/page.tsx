@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -7,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase/firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDoc, Timestamp, type DocumentData, type QuerySnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, Timestamp, type DocumentData, type QuerySnapshot, getDocs } from 'firebase/firestore';
 import type { BookDocument, ReadingEntryDocument } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,23 +32,18 @@ const isValidHttpUrl = (string?: string): string is string => {
 const fetchUserBooks = async (userId: string): Promise<BookDocument[]> => {
   if (!userId) return [];
   const booksCol = collection(db, `users/${userId}/books`);
-  return new Promise((resolve, reject) => {
-    const q = query(booksCol, orderBy("title", "asc")); // Order by title for dropdown
-    const unsubscribe = onSnapshot(q,
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        const booksData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        } as BookDocument));
-        resolve(booksData);
-      },
-      (error) => {
-        console.error("Error fetching user books: ", error);
-        reject(error);
-      }
-    );
-    // This unsubscribe won't be called here, Tanstack Query handles refetching/cleanup.
-  });
+  const q = query(booksCol, orderBy("title", "asc")); // Order by title for dropdown
+  try {
+    const snapshot = await getDocs(q);
+    const booksData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    } as BookDocument));
+    return booksData;
+  } catch (error) {
+    console.error("Error fetching user books: ", error);
+    throw error;
+  }
 };
 
 
@@ -283,4 +277,3 @@ export default function InsightsPage() {
     </div>
   );
 }
-

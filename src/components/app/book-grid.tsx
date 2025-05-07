@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { List, Grid, Loader2, Info } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase/firebase';
-import { collection, query, where, orderBy, onSnapshot, type DocumentData, type QuerySnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, type DocumentData, type QuerySnapshot, getDocs } from 'firebase/firestore';
 import type { BookDocument } from '@/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -23,26 +23,18 @@ const fetchBooks = async (userId: string): Promise<BookDocument[]> => {
   if (!userId) return [];
   
   const booksCol = collection(db, `users/${userId}/books`);
-  return new Promise((resolve, reject) => {
-    const q = query(booksCol, orderBy("updatedAt", "desc"));
-    const unsubscribe = onSnapshot(q, 
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        const booksData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        } as BookDocument));
-        resolve(booksData);
-      }, 
-      (error) => {
-        console.error("Error fetching books: ", error);
-        reject(error);
-      }
-    );
-    // Note: For a long-lived component, ensure this unsubscribe is called.
-    // TanStack Query's default behavior might not handle this perfectly for queryFn.
-    // A common pattern is to manage subscription in useEffect and update cache with queryClient.setQueryData.
-    // However, for this fix, we'll keep fetchBooks as is and focus on the useEffect loop.
-  });
+  const q = query(booksCol, orderBy("updatedAt", "desc"));
+  try {
+    const snapshot = await getDocs(q);
+    const booksData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    } as BookDocument));
+    return booksData;
+  } catch (error) {
+    console.error("Error fetching books: ", error);
+    throw error; // Re-throw to be caught by useQuery's error state
+  }
 };
 
 
