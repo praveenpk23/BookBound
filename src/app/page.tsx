@@ -1,7 +1,7 @@
 
 "use client";
 
-import { BookOpen, PlusCircle, Loader2, ClipboardList } from 'lucide-react';
+import { BookOpen, PlusCircle, Loader2, ClipboardList, ListPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddBookDialog } from '@/components/app/add-book-dialog';
 import BookGrid from '@/components/app/book-grid';
@@ -27,6 +27,12 @@ export default function Home() {
                   <Button variant="outline" size="sm">
                     <ClipboardList className="mr-0 sm:mr-2 h-5 w-5" />
                     <span className="hidden sm:inline">Insights</span>
+                  </Button>
+                </Link>
+                <Link href="/add-progress" passHref>
+                  <Button variant="outline" size="sm">
+                    <ListPlus className="mr-0 sm:mr-2 h-5 w-5" />
+                    <span className="hidden sm:inline">Log Progress</span>
                   </Button>
                 </Link>
                 <AddBookDialog>
@@ -79,3 +85,4 @@ export default function Home() {
     </div>
   );
 }
+
