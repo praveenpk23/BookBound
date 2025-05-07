@@ -39,11 +39,14 @@ export default function BookCard({ book }: BookCardProps) {
     }
   };
   
-  const usePlaceholder = !isValidHttpUrl(coverUrl);
-  const displayCoverUrl = usePlaceholder
-    ? `https://picsum.photos/seed/${encodeURIComponent(title || 'default-book-seed')}/300/450`
-    : coverUrl!; // coverUrl is now confirmed to be a valid URL string
-
+  let displayCoverUrl: string;
+  if (typeof coverUrl === 'string' && coverUrl.trim() !== '' && isValidHttpUrl(coverUrl)) {
+      displayCoverUrl = coverUrl;
+  } else {
+      const seed = title ? encodeURIComponent(title) : id || 'default-book-card';
+      displayCoverUrl = `https://picsum.photos/seed/${seed}/300/450`;
+  }
+  
   const progress = totalPages && pagesRead ? Math.round((pagesRead / totalPages) * 100) : 0;
 
   return (

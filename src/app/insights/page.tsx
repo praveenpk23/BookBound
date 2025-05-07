@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -15,7 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, BookOpen, Info, CalendarDays, MessageSquare, Tag, User, Activity } from 'lucide-react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
-import { Badge } from '@/components/ui/badge'; // Added import for Badge
+import { Badge } from '@/components/ui/badge';
 
 // Helper function from book detail page
 const isValidHttpUrl = (string?: string): string is string => {
@@ -122,7 +123,7 @@ export default function InsightsPage() {
   
   let displayCoverUrl: string | undefined;
   if (selectedBook) {
-    if (isValidHttpUrl(selectedBook.coverUrl)) {
+    if (typeof selectedBook.coverUrl === 'string' && selectedBook.coverUrl.trim() !== '' && isValidHttpUrl(selectedBook.coverUrl)) {
       displayCoverUrl = selectedBook.coverUrl;
     } else {
       const seed = selectedBook.title ? encodeURIComponent(selectedBook.title) : selectedBook.id || 'default-book-insight';

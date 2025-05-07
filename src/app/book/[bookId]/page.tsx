@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -15,6 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BookOpen, CalendarDays, Edit, FileText, Info, Loader2, MessageSquare, Tag, User, Activity } from 'lucide-react';
 import AddReadingEntryForm from '@/components/app/add-reading-entry-form';
+import EditBookDialog from '@/components/app/edit-book-dialog'; // Import EditBookDialog
 import Link from 'next/link';
 import { format } from 'date-fns';
 
@@ -129,10 +131,9 @@ export default function BookDetailPage() {
   }
   
   let displayCoverUrl: string;
-  if (isValidHttpUrl(book.coverUrl)) {
+  if (typeof book.coverUrl === 'string' && book.coverUrl.trim() !== '' && isValidHttpUrl(book.coverUrl)) {
     displayCoverUrl = book.coverUrl;
   } else {
-    // Fallback logic if book.coverUrl is invalid or missing
     const seed = book.title ? encodeURIComponent(book.title) : bookId || 'default-book-detail';
     displayCoverUrl = `https://picsum.photos/seed/${seed}/400/600`;
   }
@@ -182,9 +183,11 @@ export default function BookDetailPage() {
                   </div>
                 )}
               </CardContent>
-              {/* <CardFooter className="p-4">
-                <Button className="w-full"><Edit className="mr-2 h-4 w-4" /> Edit Book (TBD)</Button>
-              </CardFooter> */}
+              <CardFooter className="p-4">
+                <EditBookDialog book={book}>
+                    <Button className="w-full"><Edit className="mr-2 h-4 w-4" /> Edit Book</Button>
+                </EditBookDialog>
+              </CardFooter>
             </Card>
             {book.description && (
               <Card className="shadow-lg">
@@ -269,3 +272,4 @@ export default function BookDetailPage() {
       </footer>
     </div>
   );
+}
