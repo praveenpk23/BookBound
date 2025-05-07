@@ -1,7 +1,7 @@
 
 "use client";
 
-import { BookOpen, PlusCircle, Loader2 } from 'lucide-react';
+import { BookOpen, PlusCircle, Loader2, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddBookDialog } from '@/components/app/add-book-dialog';
 import BookGrid from '@/components/app/book-grid';
@@ -20,14 +20,22 @@ export default function Home() {
             <BookOpen className="h-8 w-8 text-primary" />
             <h1 className="ml-3 text-2xl font-bold text-foreground">BookBound</h1>
           </Link>
-          <nav className="flex items-center space-x-4">
+          <nav className="flex items-center space-x-2 sm:space-x-4">
             {user && (
-              <AddBookDialog>
-                <Button>
-                  <PlusCircle className="mr-2 h-5 w-5" />
-                  Add New Book
-                </Button>
-              </AddBookDialog>
+              <>
+                <Link href="/insights" passHref>
+                  <Button variant="outline" size="sm">
+                    <ClipboardList className="mr-0 sm:mr-2 h-5 w-5" />
+                    <span className="hidden sm:inline">Insights</span>
+                  </Button>
+                </Link>
+                <AddBookDialog>
+                  <Button size="sm">
+                    <PlusCircle className="mr-0 sm:mr-2 h-5 w-5" />
+                     <span className="hidden sm:inline">Add Book</span>
+                  </Button>
+                </AddBookDialog>
+              </>
             )}
             <AuthNav />
           </nav>
