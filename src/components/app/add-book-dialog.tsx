@@ -31,7 +31,7 @@ import { db, storage } from '@/lib/firebase/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
-import type { BookFormData, BookStatus, BookDocument } from '@/types';
+import type { BookFormData, BookStatus } from '@/types'; // Removed BookDocument to avoid confusion
 import { useQueryClient } from '@tanstack/react-query';
 
 interface AddBookDialogProps {
@@ -47,13 +47,12 @@ const bookFormSchema = z.object({
   category: z.string().min(1, "Category is required"),
   status: z.enum(["Want to Read", "Reading", "Finished"]),
   totalPages: z.coerce.number().int().positive().optional().nullable(),
-  coverImage: z.instanceof(FileList).optional(),
-  coverUrl: z.string().url("Must be a valid URL").optional().or(z.literal('')),
+  coverImage: z.instanceof(FileList).optional(), // This is for form handling, not for Firestore
+  coverUrl: z.string().url("Must be a valid URL").optional().or(z.literal('')), // This is for form handling and potential direct URL input
   isbn: z.string().optional(),
   description: z.string().optional(),
-}).refine(data => data.coverImage || data.coverUrl, {
-   // message: "Either upload a cover image or provide a URL.", // This makes one of them required
-   // path: ["coverImage"], // you can specify a path for the error
+}).refine(data => !!data.coverImage || !!data.coverUrl || !!data.title, { // Ensure at least some way to identify book or its cover, fallback uses title
+   // If you want to make cover mandatory: message: "Either upload a cover image or provide a URL.", path: ["coverImage"],
 });
 
 
@@ -71,9 +70,10 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
       title: "",
       author: "",
       category: "",
-      coverUrl: "",
+      coverUrl: "", // Field for direct URL input
       isbn: "",
       description: "",
+      // coverImage is FileList, managed by file input, not explicitly defaulted here
     }
   });
 
@@ -99,37 +99,41 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
     }
 
     try {
-      let processedCoverUrl = data.coverUrl || ''; // Use provided URL if available
+      let processedCoverUrlForFirestore = data.coverUrl || ''; // Use provided URL if available
 
       if (data.coverImage && data.coverImage.length > 0) {
         const file = data.coverImage[0];
         const storageRef = ref(storage, `covers/${user.uid}/${Date.now()}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
-        processedCoverUrl = await getDownloadURL(snapshot.ref);
+        processedCoverUrlForFirestore = await getDownloadURL(snapshot.ref);
+      }
+      
+      // If no cover image uploaded and no URL provided, use a placeholder based on title.
+      // This ensures coverUrl in Firestore is always a string.
+      if (!processedCoverUrlForFirestore && data.title) {
+        processedCoverUrlForFirestore = `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`;
+      } else if (!processedCoverUrlForFirestore) {
+        // Fallback if title is also somehow empty (though schema requires title)
+        processedCoverUrlForFirestore = `https://picsum.photos/seed/default-book/300/450`;
       }
 
-      const finalCoverUrl = processedCoverUrl || `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`;
 
-      // Explicitly construct the object for Firestore
+      // Construct the object for Firestore, ensuring NO `coverImage` (FileList) field.
       const bookDataForFirestore = {
         title: data.title,
         author: data.author,
         category: data.category,
         status: data.status,
-        totalPages: data.totalPages || null, // Store null if undefined/0, or Zod schema handles null
-        isbn: data.isbn || null, // Store null if empty/undefined
-        description: data.description || null, // Store null if empty/undefined
-        coverUrl: finalCoverUrl, // Use the processed URL with fallback
+        totalPages: data.totalPages || null,
+        isbn: data.isbn || null,
+        description: data.description || null,
+        coverUrl: processedCoverUrlForFirestore, // This is the string URL for the cover.
         userId: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         pagesRead: 0,
       };
       
-      // Ensure no 'undefined' values are explicitly sent for optional fields that might be null
-      // (though Firestore usually handles 'undefined' by omitting the field, being explicit with 'null' is safer).
-      // The construction above with `|| null` already handles this for totalPages, isbn, description.
-
       await addDoc(collection(db, `users/${user.uid}/books`), bookDataForFirestore);
 
       toast({ title: "Book Added", description: `${data.title} has been added to your library.` });
@@ -137,9 +141,14 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
       reset();
       setCoverPreview(null);
       setOpen(false);
-    } catch (err) {
+    } catch (err: any) { // Catch any error, including Firebase errors
       console.error("Failed to add book:", err);
-      toast({ title: "Error", description: "Failed to add book. Please try again.", variant: "destructive" });
+      // Provide a more specific error message if it's a Firebase error for unsupported field
+      if (err.message && err.message.includes("Unsupported field value")) {
+         toast({ title: "Error Adding Book", description: "There was an issue with the book data. Please check your inputs and try again. Specific: " + err.message, variant: "destructive", duration: 7000 });
+      } else {
+         toast({ title: "Error", description: "Failed to add book. Please try again.", variant: "destructive" });
+      }
     }
   };
 
@@ -226,6 +235,8 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
                 <div className="flex items-center justify-center w-full h-20 border-2 border-dashed rounded-md hover:border-primary transition-colors">
                   <ImageUp className="h-8 w-8 text-muted-foreground" />
                 </div>
+                {/* The register("coverImage") handles the FileList from the form input.
+                    It is NOT directly stored in Firestore. */}
                 <Input id="coverImage-upload" type="file" accept="image/*" {...register("coverImage")} className="sr-only" />
               </Label>
               {coverPreview && (
@@ -235,10 +246,13 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
             </div>
             {errors.coverImage && <p className="text-sm text-destructive">{errors.coverImage.message}</p>}
              <p className="text-xs text-muted-foreground text-center">OR</p>
+             {/* This input registers "coverUrl" for direct URL input from the user.
+                 This is used if no file is uploaded. */}
             <Input id="coverUrl" {...register("coverUrl")} placeholder="Enter image URL (e.g., https://...)" />
             {errors.coverUrl && <p className="text-sm text-destructive">{errors.coverUrl.message}</p>}
           </div>
 
+          {/* Displaying a generic root error or specific refine error if any */}
           {errors.root && <p className="col-span-full text-sm text-destructive text-center bg-destructive/10 p-2 rounded-md">{errors.root.message}</p>}
           
           <DialogFooter>
