@@ -103,10 +103,14 @@ export function AddBookDialog({ children }: AddBookDialogProps) {
         coverImageUrl = await getDownloadURL(snapshot.ref);
       }
 
+      // Destructure data to exclude FileList and form's coverUrl, as we use a processed coverImageUrl
+      // and FileList (coverImage) should not be stored in Firestore.
+      const { coverImage: discardedFile, coverUrl: discardedFormUrl, ...bookDetailsToSave } = data;
+
       await addDoc(collection(db, `users/${user.uid}/books`), {
-        ...data,
+        ...bookDetailsToSave, // This contains title, author, category, status, totalPages, isbn, description
         coverUrl: coverImageUrl || `https://picsum.photos/seed/${encodeURIComponent(data.title)}/300/450`, // Fallback placeholder
-        coverImage: undefined, // Don't store FileList in Firestore
+        // The 'coverImage' (FileList) field is now excluded from bookDetailsToSave and not explicitly set to undefined
         userId: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
