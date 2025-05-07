@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import BookCard from './book-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -13,6 +12,7 @@ import { collection, query, where, orderBy, onSnapshot, type DocumentData, type 
 import type { BookDocument } from '@/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import Link from 'next/link'; // Added missing Link import
 
 const categories = ["All", "Fiction", "Non-Fiction", "Science", "Fantasy", "Biography", "History", "Sci-Fi", "Mystery", "Thriller", "Romance", "Self-Help", "Other"];
 const statuses: BookDocument['status'][] = ["Want to Read", "Reading", "Finished"];
@@ -23,8 +23,6 @@ const fetchBooks = async (userId: string): Promise<BookDocument[]> => {
   if (!userId) return [];
   
   const booksCol = collection(db, `users/${userId}/books`);
-  // No real-time updates needed for the grid for now, snapshot is fine
-  // For real-time, use onSnapshot and manage unsubscription
   return new Promise((resolve, reject) => {
     const q = query(booksCol, orderBy("updatedAt", "desc"));
     const unsubscribe = onSnapshot(q, 
@@ -40,30 +38,31 @@ const fetchBooks = async (userId: string): Promise<BookDocument[]> => {
         reject(error);
       }
     );
-    // TanStack Query will manage caching, so we might not need to unsubscribe immediately here
-    // For long-lived components, or if not using TanStack Query for this, manage unsubscribe:
-    // return () => unsubscribe(); 
+    // Note: For a long-lived component, ensure this unsubscribe is called.
+    // TanStack Query's default behavior might not handle this perfectly for queryFn.
+    // A common pattern is to manage subscription in useEffect and update cache with queryClient.setQueryData.
+    // However, for this fix, we'll keep fetchBooks as is and focus on the useEffect loop.
   });
 };
 
 
 export default function BookGrid() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  // queryClient is not used in this component directly after the change. Can be removed if not needed elsewhere.
+  // const queryClient = useQueryClient(); 
 
   const { data: books = [], isLoading, error } = useQuery<BookDocument[], Error>({
     queryKey: ['books', user?.uid],
     queryFn: () => fetchBooks(user!.uid),
-    enabled: !!user, // Only run query if user is available
+    enabled: !!user, 
   });
   
-  const [filteredBooks, setFilteredBooks] = useState<BookDocument[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<"All" | BookDocument['status']>('All');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  useEffect(() => {
+  const filteredBooks = useMemo(() => {
     let tempBooks = books;
 
     if (searchTerm) {
@@ -81,15 +80,8 @@ export default function BookGrid() {
       tempBooks = tempBooks.filter(book => book.status === selectedStatus);
     }
 
-    setFilteredBooks(tempBooks);
-  }, [searchTerm, selectedCategory, selectedStatus, books]);
-
-  useEffect(() => {
-    // Pre-populate filteredBooks when books data changes
-    if (books) {
-      setFilteredBooks(books);
-    }
-  }, [books]);
+    return tempBooks;
+  }, [books, searchTerm, selectedCategory, selectedStatus]);
 
 
   if (isLoading) {
@@ -107,13 +99,12 @@ export default function BookGrid() {
         <AlertTitle>Error Loading Books</AlertTitle>
         <AlertDescription>
           There was a problem fetching your books. Please try again later.
-          {/* Details: {error.message} */}
         </AlertDescription>
       </Alert>
     );
   }
   
-  if (!user) { // Should be handled by page.tsx, but as a safeguard
+  if (!user) { 
     return (
       <div className="text-center py-10">
         <p className="text-xl text-muted-foreground">Please log in to see your books.</p>
@@ -121,7 +112,8 @@ export default function BookGrid() {
     );
   }
   
-  if (books.length === 0) {
+  // This condition checks if there are no books AT ALL, before filtering.
+  if (!isLoading && books.length === 0) {
     return (
       <div className="text-center py-10">
         <p className="text-xl text-muted-foreground">No books added yet.</p>
@@ -166,6 +158,7 @@ export default function BookGrid() {
           </Tabs>
       </div>
 
+      {/* This condition checks if there are books AFTER filtering */}
       {filteredBooks.length > 0 ? (
         viewMode === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -198,6 +191,7 @@ export default function BookGrid() {
           </div>
         )
       ) : (
+         // This shows if filters result in no books, but there are books initially.
         <div className="text-center py-10">
           <p className="text-xl text-muted-foreground">No books match your filters.</p>
         </div>
